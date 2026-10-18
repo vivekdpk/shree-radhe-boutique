@@ -22,7 +22,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export type Customer = {
-  id: string; customer_code: string; name: string; gender: 'female' | 'male'; phone: string | null
+  id: string; customer_code: string; name: string; gender: 'female' | 'male'; city: string | null; phone: string | null
   alternate_phone: string | null; email: string | null; notes: string | null
   created_at: string; updated_at: string
 }
@@ -53,9 +53,9 @@ export const api = {
     return request<CustomerPage>(`/customers?${params.toString()}`)
   },
   customer: (id: string) => request<Customer>(`/customers/${id}`),
-  createCustomer: (data: { name: string; gender: 'female' | 'male'; phone?: string; alternate_phone?: string; email?: string; notes?: string }) =>
+  createCustomer: (data: { name: string; gender: 'female' | 'male'; city?: string; phone?: string; alternate_phone?: string; email?: string; notes?: string }) =>
     request<Customer>('/customers', { method: 'POST', body: JSON.stringify(data) }),
-  updateCustomer: (id: string, data: { name?: string; gender?: 'female' | 'male'; phone?: string | null; alternate_phone?: string | null; email?: string | null; notes?: string | null }) =>
+  updateCustomer: (id: string, data: { name?: string; gender?: 'female' | 'male'; city?: string | null; phone?: string | null; alternate_phone?: string | null; email?: string | null; notes?: string | null }) =>
     request<Customer>(`/customers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   archiveCustomer: (id: string) =>
     request<void>(`/customers/${id}/archive`, { method: 'POST', body: '{}' }),

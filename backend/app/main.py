@@ -95,6 +95,7 @@ def create_customer(payload: CustomerCreate, db: Session = Depends(get_db), _own
         name=payload.name.strip(),
         normalized_name=payload.name.strip().casefold(),
         gender=payload.gender,
+        city=payload.city,
         phone=payload.phone,
         normalized_phone=phone_norm,
         alternate_phone=payload.alternate_phone,
@@ -124,6 +125,7 @@ def list_customers(
         like = f"%{term.casefold()}%"
         digits = normalize_phone(term)
         criteria = [Customer.normalized_name.ilike(like), Customer.customer_code.ilike(f"%{term}%")]
+        criteria.append(Customer.city.ilike(like))
         if digits:
             criteria.append(Customer.normalized_phone.ilike(f"%{digits}%"))
         query = query.where(or_(*criteria))

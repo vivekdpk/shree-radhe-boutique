@@ -1,6 +1,6 @@
 # Shree Radhe Boutique
 
-A private, mobile-friendly measurement book for a single tailoring business. This project is an actively developed baseline, not a production-certified application. Local development runs React, FastAPI, and PostgreSQL directly on macOS; Docker is not needed for the recommended workflow. new code change
+A private, mobile-friendly measurement book for a single tailoring business. This project is an actively developed baseline, not a production-certified application. Local development runs React, FastAPI, and PostgreSQL directly on macOS; Docker is not needed for the recommended workflow.
 
 ## What is included
 
@@ -156,7 +156,7 @@ Open a customer and create an order with its garment description, delivery date,
 
 The home screen highlights open orders and outstanding balances, including balances on delivered orders. Optional browser notifications are opt-in and are checked while the app is open; they are not delivered in the background after the app is closed. Customer JSON export includes customer details, measurement profiles and versions, and orders. Permanent deletion requires typing the exact customer name and removes that customer's orders and measurement records; export or back up data first. Archiving remains available when you want to hide a customer while retaining records.
 
-After updating an existing local database, apply the new order migration before starting the backend:
+Customer city is optional and is included in customer search. After updating an existing local database, apply the new migrations before starting the backend:
 
 ```bash
 cd backend

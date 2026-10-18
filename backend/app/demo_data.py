@@ -17,6 +17,7 @@ from app.seed import seed_templates
 TARGET_CUSTOMERS = 500
 GIVEN_NAMES = ["Aarav", "Anaya", "Ishaan", "Meera", "Rohan", "Kavya", "Arjun", "Diya", "Kabir", "Nisha"]
 FAMILY_NAMES = ["Sharma", "Patel", "Verma", "Gupta", "Rao", "Mehta", "Singh", "Joshi", "Khan", "Das"]
+SAMPLE_CITIES = ["Delhi", "Mumbai", "Jaipur", "Lucknow", "Agra", "Pune", "Ahmedabad", "Varanasi"]
 STYLES = ["Regular fit", "Slim fit", "Festive", "Everyday", "Wedding", "Classic"]
 
 
@@ -39,6 +40,8 @@ def seed_demo_data(db: Session, target: int = TARGET_CUSTOMERS, rng: random.Rand
         raise ValueError("Customer target must be between 1 and 5000")
     rng = rng or random.Random()
     seed_templates(db)
+    for customer in db.scalars(select(Customer).where(Customer.seeded.is_(True), Customer.city.is_(None))):
+        customer.city = rng.choice(SAMPLE_CITIES)
     existing = db.scalar(select(func.count()).select_from(Customer).where(Customer.seeded.is_(True))) or 0
     orders_before = db.scalar(select(func.count()).select_from(Order).join(Customer).where(Customer.seeded.is_(True), Order.seeded.is_(True))) or 0
     templates = db.scalars(
@@ -66,6 +69,7 @@ def seed_demo_data(db: Session, target: int = TARGET_CUSTOMERS, rng: random.Rand
             name=f"Sample Customer {index:04d} - {first} {last}",
             normalized_name=f"sample customer {index:04d} - {first} {last}".casefold(),
             gender=gender,
+            city=rng.choice(SAMPLE_CITIES),
             seeded=True,
             phone=f"9{index:09d}",
             normalized_phone=f"9{index:09d}",

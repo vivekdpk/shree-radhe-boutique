@@ -76,6 +76,16 @@ def test_customer_update_rejects_whitespace_only_name():
         raise AssertionError("Whitespace-only customer names must be rejected")
 
 
+def test_customer_city_is_trimmed_and_can_be_cleared():
+    from app.schemas.schemas import CustomerCreate, CustomerUpdate
+
+    created = CustomerCreate(name="Riya", gender="female", city="  Jaipur  ")
+    assert created.city == "Jaipur"
+    assert CustomerCreate(name="Riya", gender="female", city="  ").city is None
+    assert CustomerUpdate(city="  Pune ").city == "Pune"
+    assert CustomerUpdate(city="  ").city is None
+
+
 def test_seeded_garment_fields_are_required_and_have_sane_ranges():
     from app.template_catalog import TEMPLATES, fields
 
