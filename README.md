@@ -1,6 +1,6 @@
 # Shree Radhe Boutique
 
-A private, mobile-friendly measurement book for a single tailoring business. This project is an actively developed baseline, not a production-certified application. Local development runs React, FastAPI, and PostgreSQL directly on macOS; Docker is not needed for the recommended workflow.
+A private, mobile-friendly measurement book for a single tailoring business. This project is an actively developed baseline, not a production-certified application. Local development runs React, FastAPI, and PostgreSQL directly on macOS; Docker is not needed for the recommended workflow. new code change
 
 ## What is included
 
