@@ -69,6 +69,7 @@ export default function App() {
   const [newEmail, setNewEmail] = useState('')
   const [newCustomerNotes, setNewCustomerNotes] = useState('')
   const [newGender, setNewGender] = useState<'female' | 'male'>('female')
+  const [newCity, setNewCity] = useState('')
   const [editingCustomer, setEditingCustomer] = useState(false)
   const [editName, setEditName] = useState('')
   const [editPhone, setEditPhone] = useState('')
@@ -76,6 +77,7 @@ export default function App() {
   const [editEmail, setEditEmail] = useState('')
   const [editNotes, setEditNotes] = useState('')
   const [editGender, setEditGender] = useState<'female' | 'male'>('female')
+  const [editCity, setEditCity] = useState('')
   const [formValues, setFormValues] = useState<Record<string, string>>({})
   const [unit, setUnit] = useState<'inches' | 'cm'>('inches')
   const [fit, setFit] = useState('regular')
@@ -210,8 +212,8 @@ export default function App() {
       const phoneKey = newPhone.replace(/\D/g, '')
       const exactMatches = possibleMatches.items.filter(c => c.name.trim().toLocaleLowerCase() === nameKey || (phoneKey.length >= 7 && (c.phone ?? '').replace(/\D/g, '') === phoneKey))
       if (exactMatches.length && !window.confirm(`Possible existing customer: ${exactMatches.map(c => `${c.name} (${c.customer_code})`).join(', ')}. Add another record anyway?`)) return
-      const customer = await api.createCustomer({ name: newName, gender: newGender, phone: newPhone || undefined, alternate_phone: newAltPhone || undefined, email: newEmail || undefined, notes: newCustomerNotes || undefined })
-      setNewName(''); setNewPhone(''); setNewAltPhone(''); setNewEmail(''); setNewCustomerNotes(''); setNewGender('female'); setShowAddCustomer(false)
+      const customer = await api.createCustomer({ name: newName, gender: newGender, city: newCity.trim() || undefined, phone: newPhone || undefined, alternate_phone: newAltPhone || undefined, email: newEmail || undefined, notes: newCustomerNotes || undefined })
+      setNewName(''); setNewPhone(''); setNewAltPhone(''); setNewEmail(''); setNewCustomerNotes(''); setNewGender('female'); setNewCity(''); setShowAddCustomer(false)
       setCustomerPage(0)
       const result = await api.customers(search, genderFilter, CUSTOMER_PAGE_SIZE, 0)
       setCustomers(result.items); setCustomerTotal(result.total_count)
@@ -353,7 +355,7 @@ export default function App() {
         rows.push(...(await api.customers('', '', 500, offset)).items)
       }
       const quote = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`
-      const csv = [['Customer code','Name','Gender','Phone','Alternate phone','Email','Notes'], ...rows.map(c => [c.customer_code,c.name,c.gender,c.phone,c.alternate_phone,c.email,c.notes])].map(row => row.map(quote).join(',')).join('\r\n')
+      const csv = [['Customer code','Name','Gender','City','Phone','Alternate phone','Email','Notes'], ...rows.map(c => [c.customer_code,c.name,c.gender,c.city,c.phone,c.alternate_phone,c.email,c.notes])].map(row => row.map(quote).join(',')).join('\r\n')
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
       const link = document.createElement('a'); link.href = url; link.download = 'shree-radhe-customers.csv'; link.click(); URL.revokeObjectURL(url)
     } catch (e) { setError((e as Error).message) }
@@ -367,6 +369,7 @@ export default function App() {
     setEditEmail(selectedCustomer.email ?? '')
     setEditNotes(selectedCustomer.notes ?? '')
     setEditGender(selectedCustomer.gender)
+    setEditCity(selectedCustomer.city ?? '')
     setEditingCustomer(true)
   }
 
@@ -376,7 +379,7 @@ export default function App() {
     setBusy(true); setError('')
     try {
       const updated = await api.updateCustomer(selectedCustomer.id, {
-        name: editName.trim(), gender: editGender, phone: editPhone.trim() || null,
+        name: editName.trim(), gender: editGender, city: editCity.trim() || null, phone: editPhone.trim() || null,
         alternate_phone: editAltPhone.trim() || null, email: editEmail.trim() || null, notes: editNotes.trim() || null,
       })
       setSelectedCustomer(updated)
@@ -544,6 +547,7 @@ export default function App() {
               <div className="form-grid">
                 <label>Customer name<input value={newName} onChange={e => setNewName(e.target.value)} required maxLength={150} placeholder="e.g. Rahul Sharma" autoFocus/></label>
                 <label>Gender<select value={newGender} onChange={e => setNewGender(e.target.value as 'female' | 'male')}><option value="female">Female</option><option value="male">Male</option></select></label>
+                <label>City<input value={newCity} onChange={e => setNewCity(e.target.value)} maxLength={100} placeholder="e.g. Jaipur"/></label>
                 <label>Mobile number <span className="muted">(optional)</span><input value={newPhone} onChange={e => setNewPhone(e.target.value)} maxLength={20} placeholder="+91…"/></label>
                 <label>Alternate phone <span className="muted">(optional)</span><input value={newAltPhone} onChange={e => setNewAltPhone(e.target.value)} maxLength={20}/></label>
                 <label>Email <span className="muted">(optional)</span><input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} maxLength={254}/></label>
@@ -552,13 +556,13 @@ export default function App() {
               <div className="form-actions"><button type="button" className="secondary" onClick={() => setShowAddCustomer(false)}>Cancel</button><button className="primary" disabled={busy}><Plus size={17}/>{busy ? 'Saving…' : 'Save customer'}</button></div>
             </form>}
             <div className="customer-filters">
-              <div className="searchbox"><Search size={18}/><input value={search} onChange={e => { setSearch(e.target.value); setCustomerPage(0) }} placeholder="Search by name, phone, or code" /></div>
+              <div className="searchbox"><Search size={18}/><input value={search} onChange={e => { setSearch(e.target.value); setCustomerPage(0) }} placeholder="Search name, city, phone, or code" /></div>
               <label className="gender-filter">Gender<select value={genderFilter} onChange={e => { setGenderFilter(e.target.value as '' | 'female' | 'male'); setCustomerPage(0) }}><option value="">All genders</option><option value="female">Female</option><option value="male">Male</option></select></label>
             </div>
             <div className="customer-list">
               {customers.map(c => <button className="customer-row" key={c.id} onClick={() => openCustomer(c)}>
                 <span className="avatar">{c.name.slice(0,1).toUpperCase()}</span>
-                <span className="customer-main"><b>{c.name}</b><small>{c.phone || c.customer_code} · {c.gender === 'female' ? 'Female' : 'Male'}</small></span>
+                <span className="customer-main"><b>{c.name}</b><small>{c.phone || c.customer_code} · {c.gender === 'female' ? 'Female' : 'Male'}{c.city ? ` · ${c.city}` : ''}</small></span>
                 <span className="customer-code">{c.customer_code}</span>
               </button>)}
               {!customers.length && <div className="empty"><Users size={25}/><b>No customers found</b><span>Add your first customer below.</span></div>}
@@ -578,7 +582,7 @@ export default function App() {
           <button className="back-button" onClick={() => setView('customers')}><ArrowLeft size={16}/> Customers</button>
           <section className="hero compact">
             <p className="eyebrow">{selectedCustomer.customer_code}</p>
-            <h1>{selectedCustomer.name}</h1><p className="muted">{selectedCustomer.gender === 'female' ? 'Female' : 'Male'} · {selectedCustomer.phone || 'No phone added'}</p>
+            <h1>{selectedCustomer.name}</h1><p className="muted">{selectedCustomer.gender === 'female' ? 'Female' : 'Male'}{selectedCustomer.city ? ` · ${selectedCustomer.city}` : ''} · {selectedCustomer.phone || 'No phone added'}</p>
             <div className="customer-actions">
               <button className="secondary" title="Edit customer" aria-label="Edit customer" onClick={beginCustomerEdit}><Pencil size={15}/><span className="action-label">Edit customer</span></button>
               <button className="secondary" title="Export records" aria-label="Export records" onClick={exportCustomer}><Download size={15}/><span className="action-label">Export records</span></button>
@@ -593,6 +597,7 @@ export default function App() {
             <form className="form-grid" onSubmit={saveCustomerEdit}>
               <label>Customer name<input value={editName} onChange={e => setEditName(e.target.value)} required maxLength={150}/></label>
               <label>Gender<select value={editGender} onChange={e => setEditGender(e.target.value as 'female' | 'male')}><option value="female">Female</option><option value="male">Male</option></select></label>
+              <label>City<input value={editCity} onChange={e => setEditCity(e.target.value)} maxLength={100}/></label>
               <label>Mobile number<input value={editPhone} onChange={e => setEditPhone(e.target.value)} maxLength={20} placeholder="+91…"/></label>
               <label>Alternate phone<input value={editAltPhone} onChange={e => setEditAltPhone(e.target.value)} maxLength={20}/></label>
               <label>Email<input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} maxLength={254}/></label>

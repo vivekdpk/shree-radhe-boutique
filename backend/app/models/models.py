@@ -17,6 +17,7 @@ class Customer(Base):
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     normalized_name: Mapped[str] = mapped_column(String(150), nullable=False, index=True)
     gender: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    city: Mapped[str | None] = mapped_column(String(100))
     seeded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     phone: Mapped[str | None] = mapped_column(String(20))
     normalized_phone: Mapped[str | None] = mapped_column(String(20), index=True)

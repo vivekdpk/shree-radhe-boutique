@@ -14,6 +14,7 @@ Gender = Literal["female", "male"]
 class CustomerCreate(BaseModel):
     name: str = Field(min_length=1, max_length=150)
     gender: Gender
+    city: str | None = Field(default=None, max_length=100)
     phone: str | None = Field(default=None, max_length=20)
     alternate_phone: str | None = Field(default=None, max_length=20)
     email: str | None = Field(default=None, max_length=254)
@@ -27,10 +28,17 @@ class CustomerCreate(BaseModel):
             raise ValueError("Name cannot be blank")
         return value
 
+    @field_validator("city")
+    @classmethod
+    def trim_city(cls, value: str | None) -> str | None:
+        value = value.strip() if value is not None else None
+        return value or None
+
 
 class CustomerUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=150)
     gender: Gender | None = None
+    city: str | None = Field(default=None, max_length=100)
     phone: str | None = Field(default=None, max_length=20)
     alternate_phone: str | None = Field(default=None, max_length=20)
     email: str | None = Field(default=None, max_length=254)
@@ -46,6 +54,12 @@ class CustomerUpdate(BaseModel):
             raise ValueError("Name cannot be blank")
         return value
 
+    @field_validator("city")
+    @classmethod
+    def trim_updated_city(cls, value: str | None) -> str | None:
+        value = value.strip() if value is not None else None
+        return value or None
+
 
 class CustomerOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -53,6 +67,7 @@ class CustomerOut(BaseModel):
     customer_code: str
     name: str
     gender: Gender
+    city: str | None
     phone: str | None
     alternate_phone: str | None
     email: str | None
