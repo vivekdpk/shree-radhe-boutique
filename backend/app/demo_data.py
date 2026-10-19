@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db import SessionLocal
 from app.models.models import (
-    Customer, GarmentTemplate, GarmentTemplateVersion, MeasurementProfile, MeasurementRecord, Order,
+    Customer, GarmentTemplate, GarmentTemplateVersion, MeasurementProfile, MeasurementRecord, Order, OrderPayment,
 )
 from app.seed import seed_templates
 
@@ -131,7 +131,7 @@ def _add_sample_orders(db: Session, customer: Customer, records: list[Measuremen
         advance = round(price * rng.uniform(0, 0.6), 2)
         sequence = db.execute(text("SELECT nextval('order_number_seq')")).scalar_one()
         record = rng.choice(records) if records else None
-        db.add(Order(
+        order = Order(
             order_number=f"SRB-O{sequence:06d}", customer_id=customer.id,
             measurement_record_id=record.id if record else None,
             seeded=True,
@@ -140,7 +140,11 @@ def _add_sample_orders(db: Session, customer: Customer, records: list[Measuremen
             due_date=now + timedelta(days=days), price=price, advance=advance,
             notes="Generated demo order; safe to remove with the demo cleanup command.",
             created_at=now, updated_at=now,
-        ))
+        )
+        db.add(order)
+        if advance > 0:
+            db.add(OrderPayment(order=order, amount=advance, paid_at=order.order_date,
+                method="cash", note="Generated demo payment", created_at=now))
     return count
 
 

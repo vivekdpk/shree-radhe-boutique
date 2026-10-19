@@ -110,6 +110,44 @@ class Order(Base):
     )
     customer: Mapped[Customer] = relationship()
     measurement_record: Mapped[MeasurementRecord | None] = relationship()
+    payments: Mapped[list["OrderPayment"]] = relationship(back_populates="order", cascade="all, delete-orphan")
+
+
+class OrderPayment(Base):
+    __tablename__ = "order_payments"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    paid_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+    method: Mapped[str] = mapped_column(String(20), nullable=False, default="cash")
+    note: Mapped[str | None] = mapped_column(String(300))
+    is_opening_balance: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    __table_args__ = (
+        CheckConstraint("amount > 0", name="ck_order_payment_positive"),
+        CheckConstraint("method IN ('cash','upi','bank_transfer','card','other')", name="ck_order_payment_method"),
+    )
+    order: Mapped[Order] = relationship(back_populates="payments")
+
+
+class Inquiry(Base):
+    __tablename__ = "inquiries"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    phone: Mapped[str] = mapped_column(String(30), nullable=False)
+    email: Mapped[str] = mapped_column(String(254), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="new", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+    __table_args__ = (CheckConstraint("status IN ('new','read','archived')", name="ck_inquiry_status"),)
+
+
+class SiteSetting(Base):
+    __tablename__ = "site_settings"
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[str] = mapped_column(String(100), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
 
 Index("ix_measurement_history", MeasurementRecord.profile_id, MeasurementRecord.version.desc())

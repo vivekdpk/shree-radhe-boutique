@@ -9,14 +9,16 @@ A private, mobile-friendly measurement book for a single tailoring business. Thi
 - Customer list pagination (25 rows per page) and a top-of-list add-customer form.
 - Versioned garment templates, multiple profiles per customer, and measurement history.
 - Measurement-history comparisons when the saved versions use the same unit.
-- Tailoring orders with search, editable details, due dates, statuses, saved-measurement links, price, advance payments, and remaining balances.
-- Home-screen delivery queue and unpaid-balance list, printable order slips and measurement sheets, plus an orders CSV export.
+- Tailoring orders with search, editable details, due dates, status, saved-measurement links, price, and remaining balance; quick filters for due today, overdue, unpaid, and status.
+- Payment transaction history per order with method and optional note, plus printable receipts for individual payments and printable order slips.
 - Customer JSON export, duplicate-entry warning, editable contact notes, and explicit permanent deletion after name confirmation.
 - Optional browser reminders for due/overdue open orders while the app is open; browser notifications do not run as a background reminder service.
 - 500 fictional demo customers with 3–4 randomized garment profiles and 1–3 generated orders each.
 - Repeatable seed operation backfills missing demo orders; cleanup targets seeded orders and customers only, while preserving demo customers that have app-created orders.
 - Responsive React PWA shell and a new boutique-themed icon.
 - Warm dashboard with a forest-green sidebar, mobile slide-out navigation, KPI cards, due-order queue, and unpaid-balance summary.
+- Customer insights based on live customer/order data: top 10% by non-cancelled order value, repeat customers, new/active/inactive segments, customers without orders, and city-level order value.
+- Customer book card grid with per-customer order count, order value, paid amount, and balance; matching-customer totals follow search and gender filters across all pages.
 - PostgreSQL schema migrations managed by Alembic.
 
 ## Install on an Apple Silicon Mac
@@ -152,9 +154,13 @@ The build output is written to `frontend/dist`. Run these checks after installin
 
 ## Orders, payments, and customer data
 
-Open a customer and create an order with its garment description, delivery date, total price, advance, notes, and (optionally) the exact saved measurement version to use. Update the order status from the customer profile or the Orders screen. **Add payment** opens a form showing the current balance, validates the amount received today, and previews the remaining balance. The app stores the current advance total; it does not yet keep a separate payment transaction ledger or print a tax invoice.
+Customer Insights defines VIP as the top 10% of customers ranked by lifetime value of non-cancelled orders (at least one if any orders exist), repeat as 2 or more non-cancelled orders, new as a customer record created in the last 30 days, recently active as an order in the last 30 days, and at risk as a customer with order history but no order in the last 90 days. Customers with no orders and city summaries are shown separately. These are operational segments, not predictions; they update from saved records whenever Insights is opened.
 
-The home screen highlights open orders and outstanding balances, including balances on delivered orders. Optional browser notifications are opt-in and are checked while the app is open; they are not delivered in the background after the app is closed. Customer JSON export includes customer details, measurement profiles and versions, and orders. Permanent deletion requires typing the exact customer name and removes that customer's orders and measurement records; export or back up data first. Archiving remains available when you want to hide a customer while retaining records.
+Open a customer and create an order with its garment description, delivery date, total price, advance, notes, and (optionally) the exact saved measurement version to use. Update the order status from the customer profile or the Orders screen. The Orders screen has quick filters for due today, overdue, unpaid balance, and each workflow status. **Add payment** records an individual transaction with date, method, and optional note; the server prevents zero or over-balance payments. **Payments** opens the order's ledger and each payment can be printed as a receipt. New order advances are recorded as initial payments. The app does not generate a tax invoice.
+
+When applying migration `0006_order_payments` to an existing database, each order's existing advance is copied into the payment ledger as a single **opening balance** entry dated with the order date. The original transaction dates and methods were not stored, so this is clearly labelled and does not pretend to be a detailed payment history. The migration does not modify customer or order totals.
+
+The home screen highlights open orders and outstanding balances, including balances on delivered orders. Optional browser notifications are opt-in and are checked while the app is open; they are not delivered in the background after the app is closed. Customer JSON export includes customer details, measurement profiles and versions, orders, and their payment history. Permanent deletion requires typing the exact customer name and removes that customer's orders and measurement records; export or back up data first. Archiving remains available when you want to hide a customer while retaining records.
 
 Customer city is optional and is included in customer search. After updating an existing local database, apply the new migrations before starting the backend:
 

@@ -1,20 +1,23 @@
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from decimal import Decimal
 from fastapi import FastAPI, Depends, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, func, or_, text
 from sqlalchemy.orm import Session, joinedload
 from app.core.config import settings
 from app.db import get_db
-from app.models.models import Customer, GarmentTemplate, GarmentTemplateVersion, MeasurementProfile, MeasurementRecord, Order
+from app.models.models import Customer, GarmentTemplate, GarmentTemplateVersion, MeasurementProfile, MeasurementRecord, Order, OrderPayment, Inquiry, SiteSetting
 from app.schemas.schemas import (
-    LoginRequest, CustomerCreate, CustomerUpdate, CustomerOut, CustomerPage, TemplateOut,
+    LoginRequest, CustomerCreate, CustomerUpdate, CustomerOut, CustomerPage, CustomerListOut, TemplateOut,
     ProfileCreate, ProfileOut, ProfileIndexOut, MeasurementCreate, MeasurementOut, OrderCreate, OrderUpdate, OrderOut,
+    OrderPaymentCreate, OrderPaymentOut, InquiryCreate, InquiryOut, InquiryPage, InquiryStatusUpdate, InquirySubmitOut, SiteThemeUpdate, SiteThemeOut, SiteLanguageUpdate, SiteLanguageOut,
 )
 from app.security import issue_session, clear_session, verify_password, require_owner
 from app.seed import seed_templates
 from app.services.measurements import measurement_validation_error
+from app.services.payments import validate_payment_amount
 
 app = FastAPI(title="Shree Radhe Boutique API", version="0.1.0", docs_url="/docs" if settings.app_env != "production" else None)
 app.add_middleware(
@@ -53,6 +56,83 @@ def live():
 def ready(db: Session = Depends(get_db)):
     db.execute(select(1))
     return {"status": "ready"}
+
+
+@app.post("/api/v1/public/inquiries", response_model=InquirySubmitOut, status_code=201)
+def submit_public_inquiry(payload: InquiryCreate, db: Session = Depends(get_db)):
+    # Quietly discard basic bot submissions while preserving the same response as a real send.
+    if payload.website.strip():
+        return InquirySubmitOut(submitted=True)
+    db.add(Inquiry(name=payload.name, phone=payload.phone, email=payload.email, message=payload.message))
+    db.commit()
+    return InquirySubmitOut(submitted=True)
+
+
+@app.get("/api/v1/public/theme", response_model=SiteThemeOut)
+def get_public_theme(db: Session = Depends(get_db)):
+    setting = db.get(SiteSetting, "theme")
+    return SiteThemeOut(theme=setting.value if setting else "forest")
+
+
+@app.patch("/api/v1/settings/theme", response_model=SiteThemeOut)
+def update_site_theme(payload: SiteThemeUpdate, db: Session = Depends(get_db), _owner=Depends(require_owner)):
+    setting = db.get(SiteSetting, "theme")
+    if setting is None:
+        setting = SiteSetting(key="theme", value=payload.theme)
+        db.add(setting)
+    else:
+        setting.value = payload.theme
+        setting.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return SiteThemeOut(theme=setting.value)
+
+
+@app.get("/api/v1/public/language", response_model=SiteLanguageOut)
+def get_public_language(db: Session = Depends(get_db)):
+    setting = db.get(SiteSetting, "language")
+    return SiteLanguageOut(language=setting.value if setting else "hinglish")
+
+
+@app.patch("/api/v1/settings/language", response_model=SiteLanguageOut)
+def update_site_language(payload: SiteLanguageUpdate, db: Session = Depends(get_db), _owner=Depends(require_owner)):
+    setting = db.get(SiteSetting, "language")
+    if setting is None:
+        setting = SiteSetting(key="language", value=payload.language)
+        db.add(setting)
+    else:
+        setting.value = payload.language
+        setting.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return SiteLanguageOut(language=setting.value)
+
+
+@app.get("/api/v1/inquiries", response_model=InquiryPage)
+def list_inquiries(
+    status_filter: str | None = Query(None, alias="status", pattern="^(new|read|archived)$"),
+    limit: int = Query(25, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    _owner=Depends(require_owner),
+):
+    query = select(Inquiry)
+    if status_filter:
+        query = query.where(Inquiry.status == status_filter)
+    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    items = db.scalars(query.order_by(Inquiry.status != "new", Inquiry.created_at.desc()).limit(limit).offset(offset)).all()
+    return InquiryPage(items=items, total_count=total, limit=limit, offset=offset)
+
+
+@app.patch("/api/v1/inquiries/{inquiry_id}", response_model=InquiryOut)
+def update_inquiry(inquiry_id: uuid.UUID, payload: InquiryStatusUpdate,
+                   db: Session = Depends(get_db), _owner=Depends(require_owner)):
+    inquiry = db.get(Inquiry, inquiry_id)
+    if not inquiry:
+        raise HTTPException(status_code=404, detail="Inquiry not found")
+    inquiry.status = payload.status
+    inquiry.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(inquiry)
+    return inquiry
 
 
 @app.post("/api/v1/auth/login")
@@ -129,9 +209,144 @@ def list_customers(
         if digits:
             criteria.append(Customer.normalized_phone.ilike(f"%{digits}%"))
         query = query.where(or_(*criteria))
-    total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
-    items = db.scalars(query.order_by(Customer.updated_at.desc()).limit(limit).offset(offset)).all()
-    return CustomerPage(items=items, total_count=total, limit=limit, offset=offset)
+    matching_customers = query.with_only_columns(Customer.id).order_by(None).subquery()
+    order_stats = (
+        select(
+            Order.customer_id.label("customer_id"),
+            func.count(Order.id).label("order_count"),
+            func.coalesce(func.sum(Order.price), 0).label("order_value"),
+            func.coalesce(func.sum(Order.advance), 0).label("amount_paid"),
+            func.coalesce(func.sum(Order.price - Order.advance), 0).label("balance_due"),
+        )
+        .where(Order.status != "cancelled")
+        .group_by(Order.customer_id)
+        .subquery()
+    )
+    total = db.scalar(select(func.count()).select_from(matching_customers)) or 0
+    summary_row = db.execute(
+        select(
+            func.count(matching_customers.c.id),
+            func.coalesce(func.sum(order_stats.c.order_count), 0),
+            func.coalesce(func.sum(order_stats.c.order_value), 0),
+            func.coalesce(func.sum(order_stats.c.amount_paid), 0),
+            func.coalesce(func.sum(order_stats.c.balance_due), 0),
+        ).select_from(matching_customers.outerjoin(
+            order_stats, matching_customers.c.id == order_stats.c.customer_id))
+    ).one()
+    item_rows = db.execute(
+        select(Customer, order_stats.c.order_count, order_stats.c.order_value,
+            order_stats.c.amount_paid, order_stats.c.balance_due)
+        .outerjoin(order_stats, Customer.id == order_stats.c.customer_id)
+        .where(Customer.id.in_(select(matching_customers.c.id)))
+        .order_by(Customer.updated_at.desc()).limit(limit).offset(offset)
+    ).all()
+    items = []
+    for customer, order_count, order_value, amount_paid, balance_due in item_rows:
+        item = CustomerOut.model_validate(customer).model_dump(mode="python")
+        item.update({
+            "order_count": int(order_count or 0),
+            "order_value": round(float(order_value or 0), 2),
+            "amount_paid": round(float(amount_paid or 0), 2),
+            "balance_due": round(float(balance_due or 0), 2),
+        })
+        items.append(CustomerListOut.model_validate(item))
+    summary = {
+        "order_count": int(summary_row[1] or 0),
+        "order_value": round(float(summary_row[2] or 0), 2),
+        "amount_paid": round(float(summary_row[3] or 0), 2),
+        "balance_due": round(float(summary_row[4] or 0), 2),
+    }
+    return CustomerPage(items=items, total_count=total, limit=limit, offset=offset, summary=summary)
+
+
+@app.get("/api/v1/customer-insights")
+def customer_insights(db: Session = Depends(get_db), _owner=Depends(require_owner)):
+    """Customer segments calculated from saved customers and non-cancelled orders."""
+    now = datetime.now(timezone.utc)
+    rollup = (
+        select(
+            Order.customer_id.label("customer_id"),
+            func.count(Order.id).label("order_count"),
+            func.coalesce(func.sum(Order.price), 0).label("lifetime_value"),
+            func.max(Order.order_date).label("last_order_at"),
+            func.coalesce(func.sum(Order.price - Order.advance), 0).label("outstanding"),
+        )
+        .where(Order.status != "cancelled")
+        .group_by(Order.customer_id)
+        .subquery()
+    )
+    rows = db.execute(
+        select(Customer, rollup.c.order_count, rollup.c.lifetime_value,
+            rollup.c.last_order_at, rollup.c.outstanding)
+        .outerjoin(rollup, Customer.id == rollup.c.customer_id)
+        .where(Customer.archived_at.is_(None))
+        .order_by(Customer.name)
+    ).all()
+    customers = []
+    for customer, order_count, lifetime_value, last_order_at, outstanding in rows:
+        payload = CustomerOut.model_validate(customer).model_dump(mode="python")
+        payload.update({
+            "order_count": int(order_count or 0),
+            "lifetime_value": round(float(lifetime_value or 0), 2),
+            "last_order_at": last_order_at,
+            "days_since_order": max(0, (now.date() - last_order_at.date()).days) if last_order_at else None,
+            "outstanding": round(float(outstanding or 0), 2),
+        })
+        customers.append(payload)
+
+    new_cutoff = now - timedelta(days=30)
+    active_cutoff = now - timedelta(days=30)
+    risk_cutoff = now - timedelta(days=90)
+    vip_ranked = sorted((c for c in customers if c["lifetime_value"] > 0),
+        key=lambda c: (-c["lifetime_value"], -c["order_count"], c["name"].casefold()))
+    vip = vip_ranked[:max(1, (len(vip_ranked) + 9) // 10)] if vip_ranked else []
+    repeaters = sorted((c for c in customers if c["order_count"] >= 2),
+        key=lambda c: (-c["order_count"], -c["lifetime_value"], c["name"].casefold()))
+    new_customers = sorted((c for c in customers if c["created_at"] and c["created_at"] >= new_cutoff),
+        key=lambda c: c["created_at"], reverse=True)
+    active = sorted((c for c in customers if c["last_order_at"] and c["last_order_at"] >= active_cutoff),
+        key=lambda c: c["last_order_at"], reverse=True)
+    at_risk = sorted((c for c in customers if c["last_order_at"] and c["last_order_at"] < risk_cutoff),
+        key=lambda c: c["last_order_at"])
+    never_ordered = [c for c in customers if c["order_count"] == 0]
+    city_totals: dict[str, dict] = {}
+    for customer in customers:
+        city = (customer["city"] or "").strip()
+        if not city:
+            continue
+        entry = city_totals.setdefault(city.casefold(), {"city": city, "customers": 0, "orders": 0, "lifetime_value": 0.0})
+        entry["customers"] += 1
+        entry["orders"] += customer["order_count"]
+        entry["lifetime_value"] += customer["lifetime_value"]
+    top_cities = sorted(city_totals.values(), key=lambda c: (-c["lifetime_value"], -c["customers"], c["city"].casefold()))
+    return {
+        "generated_at": now,
+        "summary": {
+            "customers": len(customers),
+            "customers_with_orders": sum(c["order_count"] > 0 for c in customers),
+            "repeat_customers": len(repeaters),
+            "new_last_30_days": len(new_customers),
+            "active_last_30_days": len(active),
+            "at_risk_90_days": len(at_risk),
+            "never_ordered": len(never_ordered),
+            "lifetime_order_value": round(sum(c["lifetime_value"] for c in customers), 2),
+            "outstanding_balance": round(sum(c["outstanding"] for c in customers), 2),
+        },
+        "vip_customers": vip,
+        "repeat_customers": repeaters,
+        "new_customers": new_customers,
+        "recently_active": active,
+        "at_risk": at_risk,
+        "never_ordered": never_ordered,
+        "top_cities": top_cities,
+        "definitions": {
+            "vip": "Top 10% by lifetime value of non-cancelled orders; at least one when any customer has ordered.",
+            "repeat": "At least two non-cancelled orders.",
+            "new": "Customer record created in the last 30 days.",
+            "active": "Most recent non-cancelled order is within 30 days.",
+            "at_risk": "Has orders, but none in the last 90 days.",
+        },
+    }
 
 
 @app.get("/api/v1/customers/{customer_id}", response_model=CustomerOut)
@@ -186,7 +401,13 @@ def export_customer(customer_id: uuid.UUID, db: Session = Depends(get_db), _owne
             "measurements": [MeasurementOut.model_validate(record).model_dump(mode="json") for record in records],
         })
     orders = db.scalars(select(Order).where(Order.customer_id == customer_id).order_by(Order.order_date)).all()
-    order_data = [order_payload(order, customer) for order in orders]
+    payment_rows = db.scalars(select(OrderPayment).where(OrderPayment.order_id.in_([o.id for o in orders]))
+        .order_by(OrderPayment.paid_at, OrderPayment.created_at)).all() if orders else []
+    payments_by_order: dict[uuid.UUID, list[dict]] = {}
+    for payment in payment_rows:
+        payments_by_order.setdefault(payment.order_id, []).append(
+            OrderPaymentOut.model_validate(payment).model_dump(mode="json"))
+    order_data = [{**order_payload(order, customer), "payments": payments_by_order.get(order.id, [])} for order in orders]
     return {
         "customer": CustomerOut.model_validate(customer).model_dump(mode="json"),
         "measurement_profiles": profile_data,
@@ -265,7 +486,11 @@ def create_order(customer_id: uuid.UUID, payload: OrderCreate, db: Session = Dep
     now = datetime.now(timezone.utc)
     order = Order(order_number=f"SRB-O{number:06d}", customer_id=customer_id,
         order_date=now, updated_at=now, **payload.model_dump())
-    db.add(order); db.commit(); db.refresh(order)
+    db.add(order); db.flush()
+    if payload.advance > 0:
+        db.add(OrderPayment(order_id=order.id, amount=payload.advance, paid_at=now,
+            method="other", note="Initial advance; payment method not specified", created_at=now))
+    db.commit(); db.refresh(order)
     return order_payload(order, customer)
 
 
@@ -276,7 +501,7 @@ def update_order(order_id: uuid.UUID, payload: OrderUpdate, db: Session = Depend
         raise HTTPException(404, "Order not found")
     changes = payload.model_dump(exclude_unset=True)
     price = changes.get("price", float(order.price))
-    advance = changes.get("advance", float(order.advance))
+    advance = float(order.advance)
     if advance > price:
         raise HTTPException(422, "Advance cannot be greater than the total price")
     if "measurement_record_id" in changes and changes["measurement_record_id"]:
@@ -289,6 +514,35 @@ def update_order(order_id: uuid.UUID, payload: OrderUpdate, db: Session = Depend
     order.updated_at = datetime.now(timezone.utc)
     db.commit(); db.refresh(order)
     return order_payload(order)
+
+
+@app.get("/api/v1/orders/{order_id}/payments", response_model=list[OrderPaymentOut])
+def list_order_payments(order_id: uuid.UUID, db: Session = Depends(get_db), _owner=Depends(require_owner)):
+    if not db.get(Order, order_id):
+        raise HTTPException(404, "Order not found")
+    return db.scalars(select(OrderPayment).where(OrderPayment.order_id == order_id)
+        .order_by(OrderPayment.paid_at.desc(), OrderPayment.created_at.desc())).all()
+
+
+@app.post("/api/v1/orders/{order_id}/payments", response_model=OrderPaymentOut, status_code=201)
+def create_order_payment(order_id: uuid.UUID, payload: OrderPaymentCreate,
+    db: Session = Depends(get_db), _owner=Depends(require_owner)):
+    order = db.scalar(select(Order).where(Order.id == order_id).with_for_update())
+    if not order:
+        raise HTTPException(404, "Order not found")
+    try:
+        amount_cents, new_advance_cents = validate_payment_amount(payload.amount, order.advance, order.price)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    now = datetime.now(timezone.utc)
+    payment = OrderPayment(order_id=order.id, amount=Decimal(amount_cents) / 100,
+        paid_at=payload.paid_at or now, method=payload.method, note=payload.note, created_at=now)
+    order.advance = Decimal(new_advance_cents) / 100
+    order.updated_at = now
+    db.add(payment)
+    db.commit()
+    db.refresh(payment)
+    return payment
 
 
 @app.get("/api/v1/garment-templates", response_model=list[TemplateOut])
