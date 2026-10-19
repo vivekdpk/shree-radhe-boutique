@@ -76,11 +76,26 @@ class CustomerOut(BaseModel):
     updated_at: datetime
 
 
+class CustomerOrderTotals(BaseModel):
+    order_count: int = 0
+    order_value: float = 0
+    amount_paid: float = 0
+    balance_due: float = 0
+
+
+class CustomerListOut(CustomerOut):
+    order_count: int = 0
+    order_value: float = 0
+    amount_paid: float = 0
+    balance_due: float = 0
+
+
 class CustomerPage(BaseModel):
-    items: list[CustomerOut]
+    items: list[CustomerListOut]
     total_count: int
     limit: int
     offset: int
+    summary: CustomerOrderTotals
 
 
 class TemplateOut(BaseModel):
@@ -183,10 +198,10 @@ class OrderCreate(BaseModel):
 
 
 class OrderUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     garment_name: str | None = Field(default=None, min_length=1, max_length=120)
     due_date: datetime | None = None
     price: float | None = Field(default=None, ge=0, le=99999999)
-    advance: float | None = Field(default=None, ge=0, le=99999999)
     status: OrderStatus | None = None
     measurement_record_id: UUID | None = None
     notes: str | None = None
@@ -210,3 +225,115 @@ class OrderOut(BaseModel):
     notes: str | None
     created_at: datetime
     updated_at: datetime
+
+
+PaymentMethod = Literal["cash", "upi", "bank_transfer", "card", "other"]
+
+
+class OrderPaymentCreate(BaseModel):
+    amount: float = Field(gt=0, le=99999999)
+    method: PaymentMethod = "cash"
+    paid_at: datetime | None = None
+    note: str | None = Field(default=None, max_length=300)
+
+    @field_validator("note")
+    @classmethod
+    def trim_payment_note(cls, value: str | None) -> str | None:
+        value = value.strip() if value else None
+        return value or None
+
+
+class OrderPaymentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    order_id: UUID
+    amount: float
+    paid_at: datetime
+    method: PaymentMethod
+    note: str | None
+    is_opening_balance: bool
+    created_at: datetime
+
+
+class InquiryCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=150)
+    phone: str = Field(min_length=7, max_length=30)
+    email: str = Field(min_length=3, max_length=254)
+    message: str = Field(min_length=1, max_length=3000)
+    website: str = Field(default="", max_length=300)
+
+    @field_validator("name", "phone", "email", "message")
+    @classmethod
+    def trim_inquiry_fields(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("This field cannot be blank")
+        return value
+
+    @field_validator("phone")
+    @classmethod
+    def validate_inquiry_phone(cls, value: str) -> str:
+        digits = "".join(character for character in value if character.isdigit())
+        if len(digits) < 7:
+            raise ValueError("Enter a valid phone number")
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def validate_inquiry_email(cls, value: str) -> str:
+        import re
+        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
+            raise ValueError("Enter a valid email address")
+        return value
+
+
+InquiryStatus = Literal["new", "read", "archived"]
+
+
+class InquiryStatusUpdate(BaseModel):
+    status: InquiryStatus
+
+
+class InquiryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    name: str
+    phone: str
+    email: str
+    message: str
+    status: InquiryStatus
+    created_at: datetime
+    updated_at: datetime
+
+
+class InquiryPage(BaseModel):
+    items: list[InquiryOut]
+    total_count: int
+    limit: int
+    offset: int
+
+
+class InquirySubmitOut(BaseModel):
+    submitted: bool = True
+
+
+ThemeName = Literal["forest", "rose", "plum", "terracotta", "indigo", "black-blush"]
+
+
+class SiteThemeUpdate(BaseModel):
+    theme: ThemeName
+
+
+class SiteThemeOut(BaseModel):
+    theme: ThemeName
+
+
+LanguageName = Literal["english", "hinglish", "hindi"]
+
+
+class SiteLanguageUpdate(BaseModel):
+    language: LanguageName
+
+
+class SiteLanguageOut(BaseModel):
+    language: LanguageName
