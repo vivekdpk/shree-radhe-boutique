@@ -1231,11 +1231,15 @@ function AdminApp() {
         </section>
       </div>}
       {paymentHistoryOrder && <div className="modal-backdrop" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget) setPaymentHistoryOrder(null) }}>
-        <section className="payment-modal history-modal" role="dialog" aria-modal="true" aria-labelledby="payment-history-title">
+        <section className="payment-modal history-modal payment-history-modal" role="dialog" aria-modal="true" aria-labelledby="payment-history-title">
           <button className="icon-button modal-close" type="button" title="Close payment history" onClick={() => setPaymentHistoryOrder(null)}><X size={17}/></button>
           <p className="eyebrow">ORDER {paymentHistoryOrder.order_number}</p><h2 id="payment-history-title">Payment history</h2>
           <p className="muted">{paymentHistoryOrder.customer_name} · {paymentHistoryOrder.garment_name}</p>
-          <div className="payment-balance"><span>Paid · Balance</span><b>₹{paymentHistoryOrder.advance.toFixed(2)} · ₹{paymentHistoryOrder.balance.toFixed(2)}</b></div>
+          <div className="payment-summary-grid" aria-label={copy('Order payment summary','Order payment summary','ऑर्डर भुगतान सारांश')}>
+            <div className="payment-summary-card"><span>{copy('Order total','Order total','ऑर्डर कुल')}</span><b>₹{paymentHistoryOrder.price.toFixed(2)}</b></div>
+            <div className="payment-summary-card paid"><span>{copy('Paid so far','Paid so far','अब तक जमा')}</span><b>₹{paymentHistoryOrder.advance.toFixed(2)}</b></div>
+            <div className="payment-summary-card remaining"><span>{copy('Remaining balance','Abhi baaki','बाकी रकम')}</span><b>₹{paymentHistoryOrder.balance.toFixed(2)}</b></div>
+          </div>
           <div className="payment-history-list">{paymentHistory.map(payment => <article className="payment-history-row" key={payment.id}>
             <div><b>₹{payment.amount.toFixed(2)}</b><small>{payment.is_opening_balance ? 'Opening balance · original payment date unavailable' : `${new Date(payment.paid_at).toLocaleString()} · ${payment.method.replace('_',' ')}`}</small>{payment.note && <small>{payment.note}</small>}</div>
             <button className="icon-button" title="Print payment receipt" aria-label={`Print receipt for payment ₹${payment.amount.toFixed(2)}`} onClick={() => setPrintingPayment({ payment, order: paymentHistoryOrder })}><ReceiptText size={17}/></button>

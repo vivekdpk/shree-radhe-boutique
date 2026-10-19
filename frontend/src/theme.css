@@ -65,6 +65,15 @@
 
 .public-site[data-theme] .public-brand-mark{background:transparent;color:var(--theme-primary)}
 
+.payment-history-modal{width:min(100%,620px)}
+.payment-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:20px 0 17px}
+.payment-summary-card{display:grid;gap:8px;min-width:0;padding:14px 15px;border:1px solid var(--theme-line);border-radius:14px;background:var(--theme-soft);color:var(--theme-primary)}
+.payment-summary-card span{font-size:12px;color:color-mix(in srgb,var(--theme-ink) 65%,#fff);font-weight:650}
+.payment-summary-card b{font-size:clamp(17px,2.6vw,22px);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;color:var(--theme-primary)}
+.payment-summary-card.paid{background:color-mix(in srgb,var(--theme-tint) 60%,var(--theme-surface));}
+.payment-summary-card.remaining{background:color-mix(in srgb,#d99b55 15%,var(--theme-surface));border-color:color-mix(in srgb,#d99b55 38%,var(--theme-line));}
+@media(max-width:540px){.payment-history-modal{width:min(100%,460px)}.payment-summary-grid{grid-template-columns:1fr;gap:8px}.payment-summary-card{grid-template-columns:1fr auto;align-items:center;padding:11px 13px}.payment-summary-card b{font-size:18px}}
+
 /* Use fonts with proper Devanagari glyph shaping when Hindi is selected. */
 .app-shell[data-language="hindi"],.public-site[data-language="hindi"]{font-family:"Kohinoor Devanagari","Noto Sans Devanagari","Nirmala UI",Mangal,system-ui,sans-serif;line-height:1.55}
 .app-shell[data-language="hindi"] :is(h1,h2,h3,.topbar-title,.public-section-heading h2,.public-story h2),.public-site[data-language="hindi"] :is(h1,h2,h3){font-family:"Kohinoor Devanagari","Noto Sans Devanagari","Nirmala UI",Mangal,system-ui,sans-serif;letter-spacing:0;line-height:1.35}

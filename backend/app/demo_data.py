@@ -14,10 +14,10 @@ from app.models.models import (
 )
 from app.seed import seed_templates
 
-TARGET_CUSTOMERS = 500
-GIVEN_NAMES = ["Aarav", "Anaya", "Ishaan", "Meera", "Rohan", "Kavya", "Arjun", "Diya", "Kabir", "Nisha"]
-FAMILY_NAMES = ["Sharma", "Patel", "Verma", "Gupta", "Rao", "Mehta", "Singh", "Joshi", "Khan", "Das"]
-SAMPLE_CITIES = ["Delhi", "Mumbai", "Jaipur", "Lucknow", "Agra", "Pune", "Ahmedabad", "Varanasi"]
+TARGET_CUSTOMERS = 200
+GIVEN_NAMES = ["Aarav", "Anaya", "Ishaan", "Meera", "Rohan", "Kavya", "Arjun", "Diya", "Kabir", "Nisha","Vivek","Vishal","Rajesh","Suresh","Mahesh","Ramesh","Suresh","Mahesh","Ramesh","Suresh","Mahesh","Ramesh"]
+FAMILY_NAMES = ["Sharma", "Patel", "Verma", "Gupta", "Rao", "Mehta", "Singh", "Joshi", "Khan", "Das","Tiwari","Singh","Kumar","Yadav","Reddy","Naidu","Bose","Mandal","Chowdhury","Iyengar"]
+SAMPLE_CITIES = ["Indore", "Khargone", "Bhikangaon", "Hyderabad", "Agra", "Pune", "Ahmedabad", "Varanasi"]
 STYLES = ["Regular fit", "Slim fit", "Festive", "Everyday", "Wedding", "Classic"]
 
 
@@ -66,8 +66,8 @@ def seed_demo_data(db: Session, target: int = TARGET_CUSTOMERS, rng: random.Rand
         last = rng.choice(FAMILY_NAMES)
         customer = Customer(
             customer_code=_next_customer_code(db),
-            name=f"Sample Customer {index:04d} - {first} {last}",
-            normalized_name=f"sample customer {index:04d} - {first} {last}".casefold(),
+            name=f"{first} {last} - Sample Customer {index:04d}",
+            normalized_name=f"{first} {last} - sample customer {index:04d} - ".casefold(),
             gender=gender,
             city=rng.choice(SAMPLE_CITIES),
             seeded=True,
